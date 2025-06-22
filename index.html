@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase + GitHub Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .content {
+            padding: 30px;
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            min-width: 200px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #4ecdc4;
+        }
+        button {
+            padding: 12px 25px;
+            background: #4ecdc4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #45b7aa;
+            transform: translateY(-2px);
+        }
+        .messages {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .message {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #4ecdc4;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .message strong {
+            color: #333;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔥 Firebase + GitHub</h1>
+            <p>Realtime Database Demo</p>
+        </div>
+        
+        <div class="content">
+            <div class="status" id="status">Menghubungkan ke Firebase...</div>
+            
+            <div class="input-group">
+                <input type="text" id="nameInput" placeholder="Nama Anda" maxlength="30">
+                <input type="text" id="messageInput" placeholder="Tulis pesan disini..." maxlength="200">
+                <button onclick="sendMessage()">📤 Kirim</button>
+            </div>
+            
+            <div class="messages" id="messages">
+                <p style="text-align: center; color: #666;">Memuat pesan...</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, push, onValue, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+      const firebaseConfig = {
+  apiKey: "AIzaSyDYkQrV8Inn4ZYn8sTpSnAzkDEVe7BTn5U",
+  authDomain: "reklamesolok-7c9a2.firebaseapp.com",
+  databaseURL: "https://reklamesolok-7c9a2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "reklamesolok-7c9a2",
+  storageBucket: "reklamesolok-7c9a2.firebasestorage.app",
+  messagingSenderId: "205362657700",
+  appId: "1:205362657700:web:1212925316bff9f7c52931"
+};
+        };
+
+        // Initialize Firebase
+        let database;
+        try {
+            const app = initializeApp(firebaseConfig);
+            database = getDatabase(app);
+            updateStatus('connected', '✅ Terhubung ke Firebase');
+        } catch (error) {
+            updateStatus('disconnected', '❌ Gagal terhubung: ' + error.message);
+            console.error('Firebase Error:', error);
+        }
+
+        function updateStatus(type, message) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = message;
+        }
+
+        // Fungsi kirim pesan
+        window.sendMessage = function() {
+            if (!database) {
+                alert('Firebase belum terhubung!');
+                return;
+            }
+
+            const name = document.getElementById('nameInput').value.trim();
+            const message = document.getElementById('messageInput').value.trim();
+            
+            if (!name || !message) {
+                alert('Harap isi nama dan pesan!');
+                return;
+            }
+
+            try {
+                push(ref(database, 'messages'), {
+                    name: name,
+                    message: message,
+                    timestamp: serverTimestamp()
+                });
+                
+                document.getElementById('messageInput').value = '';
+                document.getElementById('messageInput').focus();
+            } catch (error) {
+                alert('Gagal mengirim pesan: ' + error.message);
+            }
+        }
+
+        // Listen realtime messages
+        if (database) {
+            const messagesRef = ref(database, 'messages');
+            onValue(messagesRef, (snapshot) => {
+                const data = snapshot.val();
+                const messagesDiv = document.getElementById('messages');
+                
+                if (data) {
+                    // Convert to array dan sort by timestamp
+                    const messages = Object.entries(data)
+                        .map(([key, value]) => ({...value, id: key}))
+                        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                        .slice(0, 50); // Limit 50 pesan terbaru
+
+                    messagesDiv.innerHTML = messages.map(msg => `
+                        <div class="message">
+                            <strong>${escapeHtml(msg.name)}:</strong> ${escapeHtml(msg.message)}
+                            <div class="timestamp">${formatTime(msg.timestamp)}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    messagesDiv.innerHTML = '<p style="text-align: center; color: #666;">Belum ada pesan. Jadilah yang pertama! 🚀</p>';
+                }
+            }, (error) => {
+                console.error('Database Error:', error);
+                updateStatus('disconnected', '❌ Error membaca database');
+            });
+        }
+
+        // Helper functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return 'Baru saja';
+            const date = new Date(timestamp);
+            return date.toLocaleString('id-ID');
+        }
+
+        // Enter key to send
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
