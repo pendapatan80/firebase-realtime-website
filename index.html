@@ -1130,7 +1130,7 @@
       const file = evt.target.files[0];
       if (!file) return;
       
-      if (!confirm('Import data dari Excel akan menimpa data yang sudah ada. Lanjutkan?')) {
+      if (!confirm('Import data dari Excel akan menambah data baru tanpa menimpa data yang sudah ada. Lanjutkan?')) {
         evt.target.value = '';
         return;
       }
