@@ -636,7 +636,7 @@
         <div class="form-group">
           <label><i class="fas fa-image"></i> Foto Reklame</label>
           <div class="file-input-wrapper">
-            <input type="file" id="foto" accept="image/*" />
+            <input type="file" id="foto" accept="image/*" required />
             <span><i class="fas fa-upload"></i> Pilih File Gambar (Maks. 2MB)</span>
           </div>
           <small id="fileHelp" class="form-text text-muted">Format: JPG, PNG (Rasio 4:3 disarankan)</small>
@@ -646,11 +646,6 @@
               <i class="fas fa-trash"></i> Hapus
             </button>
           </div>
-        </div>
-
-        <div class="form-group">
-          <label><i class="fas fa-sticky-note"></i> Keterangan Tambahan</label>
-          <textarea id="keterangan" rows="3" placeholder="Catatan tambahan tentang reklame"></textarea>
         </div>
 
         <div class="button-group">
@@ -753,6 +748,7 @@
     let lastKey = null;
     const pageSize = 10;
     let allDataLoaded = false;
+    let allData = []; // Menyimpan semua data untuk statistik
 
     // Fungsi untuk menampilkan modal
     function showModal(modalId) {
@@ -778,6 +774,7 @@
         .then((userCredential) => {
           closeModal();
           document.getElementById('appContainer').style.display = 'block';
+          loadAllDataForStats(); // Muat semua data untuk statistik
           loadData();
         })
         .catch((error) => {
@@ -799,11 +796,29 @@
     auth.onAuthStateChanged((user) => {
       if (user) {
         document.getElementById('appContainer').style.display = 'block';
+        loadAllDataForStats(); // Muat semua data untuk statistik
         loadData();
       } else {
         showModal('loginModal');
       }
     });
+
+    // Fungsi untuk memuat semua data untuk statistik
+    function loadAllDataForStats() {
+      database.ref('reklame').once('value')
+        .then((snapshot) => {
+          allData = [];
+          snapshot.forEach((childSnapshot) => {
+            const item = childSnapshot.val();
+            item.id = childSnapshot.key;
+            allData.push(item);
+          });
+          updateStats();
+        })
+        .catch((error) => {
+          console.error("Error loading all data for stats:", error);
+        });
+    }
 
     // Preview gambar sebelum upload
     document.getElementById('foto').addEventListener('change', function(e) {
@@ -960,7 +975,8 @@
       const now = new Date();
       let total = 0, aktif = 0, kadaluarsa = 0, pendapatan = 0;
 
-      data.forEach(item => {
+      // Gunakan allData untuk statistik agar mencakup semua data
+      allData.forEach(item => {
         const isExpired = new Date(item.tglAkhir) < now;
         if (isExpired) kadaluarsa++; else aktif++;
         total++;
@@ -985,6 +1001,11 @@
       const fotoInput = document.getElementById('foto');
       
       try {
+        // Validasi file foto
+        if (!fotoInput.files[0] && !editIndex) {
+          throw new Error('Foto reklame wajib diisi');
+        }
+
         // Buat ID unik untuk data baru
         const id = editIndex || database.ref().child('reklame').push().key;
         
@@ -997,7 +1018,6 @@
           tarif: input('tarif'),
           tglMulai: input('tglMulai'),
           tglAkhir: input('tglAkhir'),
-          keterangan: input('keterangan'),
           updatedAt: new Date().toISOString()
         };
 
@@ -1021,6 +1041,7 @@
         lastKey = null;
         allDataLoaded = false;
         data = [];
+        loadAllDataForStats(); // Muat ulang semua data untuk statistik
         loadData();
         
       } catch (error) {
@@ -1038,6 +1059,7 @@
       editIndex = null;
       document.getElementById('imagePreview').style.display = 'none';
       document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Simpan Data';
+      document.getElementById('foto').required = true;
     }
 
     // Fungsi untuk edit data
@@ -1056,12 +1078,14 @@
       document.getElementById('tarif').value = item.tarif || '';
       document.getElementById('tglMulai').value = item.tglMulai || '';
       document.getElementById('tglAkhir').value = item.tglAkhir || '';
-      document.getElementById('keterangan').value = item.keterangan || '';
       
       // Tampilkan preview gambar jika ada
       if (item.foto) {
         document.getElementById('previewImage').src = item.foto;
         document.getElementById('imagePreview').style.display = 'block';
+        document.getElementById('foto').required = false;
+      } else {
+        document.getElementById('foto').required = true;
       }
       
       // Scroll ke form
@@ -1090,6 +1114,7 @@
         lastKey = null;
         allDataLoaded = false;
         data = [];
+        loadAllDataForStats(); // Muat ulang semua data untuk statistik
         loadData();
         
       } catch (error) {
@@ -1142,9 +1167,6 @@
           const sheet = wb.Sheets[wb.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(sheet);
           
-          // Hapus semua data yang ada
-          await database.ref('reklame').remove();
-          
           // Upload data baru
           const uploadPromises = rows.map(async (row, index) => {
             const id = database.ref().child('reklame').push().key;
@@ -1157,7 +1179,6 @@
               tarif: row['Tarif'] || 0,
               tglMulai: row['Tanggal Mulai'] || '',
               tglAkhir: row['Tanggal Akhir'] || '',
-              keterangan: row['Keterangan'] || '',
               createdAt: new Date().toISOString()
             };
             
@@ -1170,6 +1191,7 @@
           lastKey = null;
           allDataLoaded = false;
           data = [];
+          loadAllDataForStats(); // Muat ulang semua data untuk statistik
           loadData();
           
           alert(`Berhasil mengimpor ${rows.length} data reklame`);
@@ -1186,7 +1208,7 @@
 
     // Fungsi untuk export ke Excel
     function exportExcel() {
-      const exportData = data.map(item => ({
+      const exportData = allData.map(item => ({
         'Pemilik': item.pemilik,
         'Merek': item.merek,
         'Jenis': item.jenis,
@@ -1196,7 +1218,7 @@
         'Tanggal Mulai': item.tglMulai,
         'Tanggal Akhir': item.tglAkhir,
         'Status': new Date(item.tglAkhir) < new Date() ? 'Kadaluwarsa' : 'Aktif',
-        'Keterangan': item.keterangan || ''
+        'URL Foto': item.foto || ''
       }));
       
       const wb = XLSX.utils.book_new();
@@ -1208,8 +1230,8 @@
       
       // Gabungkan sel untuk judul
       ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } }
       ];
       
       XLSX.utils.book_append_sheet(wb, ws, 'Data Reklame');
