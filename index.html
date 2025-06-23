@@ -636,7 +636,7 @@
         <div class="form-group">
           <label><i class="fas fa-image"></i> Foto Reklame</label>
           <div class="file-input-wrapper">
-            <input type="file" id="foto" accept="image/*" required />
+            <input type="file" id="foto" accept="image/*" />
             <span><i class="fas fa-upload"></i> Pilih File Gambar (Maks. 2MB)</span>
           </div>
           <small id="fileHelp" class="form-text text-muted">Format: JPG, PNG (Rasio 4:3 disarankan)</small>
@@ -749,6 +749,7 @@
     const pageSize = 10;
     let allDataLoaded = false;
     let allData = []; // Menyimpan semua data untuk statistik
+    let filteredData = []; // Menyimpan data yang difilter untuk export
 
     // Fungsi untuk menampilkan modal
     function showModal(modalId) {
@@ -892,6 +893,9 @@
             data = newData;
           }
 
+          // Set filteredData sama dengan data yang dimuat
+          filteredData = [...data];
+          
           renderTable();
           updateStats();
         })
@@ -914,12 +918,12 @@
       tbody.innerHTML = '';
       const now = new Date();
 
-      if (data.length === 0) {
+      if (filteredData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="12" style="text-align: center;">Tidak ada data reklame</td></tr>';
         return;
       }
 
-      data.forEach((item, i) => {
+      filteredData.forEach((item, i) => {
         const isExpired = new Date(item.tglAkhir) < now;
         const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
 
@@ -1001,11 +1005,6 @@
       const fotoInput = document.getElementById('foto');
       
       try {
-        // Validasi file foto
-        if (!fotoInput.files[0] && !editIndex) {
-          throw new Error('Foto reklame wajib diisi');
-        }
-
         // Buat ID unik untuk data baru
         const id = editIndex || database.ref().child('reklame').push().key;
         
@@ -1028,6 +1027,7 @@
           await storageRef.put(file);
           entry.foto = await storageRef.getDownloadURL();
         } else if (editIndex && data.find(item => item.id === editIndex)?.foto) {
+          // Jika edit dan tidak upload foto baru, gunakan foto lama
           entry.foto = data.find(item => item.id === editIndex).foto;
         }
 
@@ -1059,7 +1059,7 @@
       editIndex = null;
       document.getElementById('imagePreview').style.display = 'none';
       document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Simpan Data';
-      document.getElementById('foto').required = true;
+      document.getElementById('foto').removeAttribute('required');
     }
 
     // Fungsi untuk edit data
@@ -1083,9 +1083,6 @@
       if (item.foto) {
         document.getElementById('previewImage').src = item.foto;
         document.getElementById('imagePreview').style.display = 'block';
-        document.getElementById('foto').required = false;
-      } else {
-        document.getElementById('foto').required = true;
       }
       
       // Scroll ke form
@@ -1130,14 +1127,7 @@
       const status = document.getElementById('statusFilter').value;
       const now = new Date();
       
-      const tbody = document.querySelector('#tabelData tbody');
-      tbody.querySelectorAll('tr').forEach(tr => {
-        const index = parseInt(tr.cells[0].textContent) - 1;
-        if (isNaN(index)) return;
-        
-        const item = data[index];
-        if (!item) return;
-        
+      filteredData = data.filter(item => {
         const text = Object.values(item).join(' ').toLowerCase();
         const isExpired = new Date(item.tglAkhir) < now;
         const statusText = isExpired ? 'Kadaluwarsa' : 'Aktif';
@@ -1146,8 +1136,10 @@
         const isJenis = !jenis || item.jenis === jenis;
         const isStatus = !status || statusText === status;
         
-        tr.style.display = isMatch && isJenis && isStatus ? '' : 'none';
+        return isMatch && isJenis && isStatus;
       });
+      
+      renderTable();
     }
 
     // Fungsi untuk import dari Excel
@@ -1208,7 +1200,10 @@
 
     // Fungsi untuk export ke Excel
     function exportExcel() {
-      const exportData = allData.map(item => ({
+      // Gunakan filteredData jika ada filter, jika tidak gunakan allData
+      const exportData = filteredData.length > 0 ? filteredData : allData;
+      
+      const formattedData = exportData.map(item => ({
         'Pemilik': item.pemilik,
         'Merek': item.merek,
         'Jenis': item.jenis,
@@ -1222,7 +1217,7 @@
       }));
       
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(exportData);
+      const ws = XLSX.utils.json_to_sheet(formattedData);
       
       // Tambahkan judul
       XLSX.utils.sheet_add_aoa(ws, [["LAPORAN DATA REKLAME KOTA SOLOK"]], { origin: "A1" });
@@ -1246,6 +1241,9 @@
         unit: 'mm'
       });
 
+      // Gunakan filteredData jika ada filter, jika tidak gunakan allData
+      const exportData = filteredData.length > 0 ? filteredData : allData;
+
       // Sembunyikan elemen yang tidak perlu
       document.getElementById('laporanJudul').style.display = 'block';
       const aksiHeader = document.querySelector('th:last-child');
@@ -1261,6 +1259,34 @@
       const clonedTable = document.getElementById('tabelData').cloneNode(true);
       clonedTable.style.width = '100%';
       clonedTable.style.fontSize = '12px';
+      
+      // Kosongkan tbody dan isi dengan data yang difilter
+      const tbody = clonedTable.querySelector('tbody');
+      tbody.innerHTML = '';
+      
+      const now = new Date();
+      exportData.forEach((item, i) => {
+        const isExpired = new Date(item.tglAkhir) < now;
+        const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
+        
+        const tr = document.createElement('tr');
+        if (isExpired) tr.classList.add('expired');
+        
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${item.pemilik}</td>
+          <td>${item.merek}</td>
+          <td>${item.jenis}</td>
+          <td>${item.ukuran}</td>
+          <td>${item.lokasi}</td>
+          <td>Rp ${Number(item.tarif).toLocaleString()}</td>
+          <td>${formatDate(item.tglMulai)}</td>
+          <td>${formatDate(item.tglAkhir)}</td>
+          <td><span class="status-badge ${isExpired ? 'status-kadaluwarsa' : 'status-aktif'}">${status}</span></td>
+          <td>${item.foto ? 'Ada' : 'Tidak Ada'}</td>`;
+        tbody.appendChild(tr);
+      });
+      
       clonedTable.querySelectorAll('th, td').forEach(cell => {
         cell.style.padding = '4px 6px';
       });
@@ -1307,6 +1333,10 @@
     // Fungsi untuk cetak tabel
     function printTable() {
       const win = window.open('', '', 'height=700,width=900');
+      
+      // Gunakan filteredData jika ada filter, jika tidak gunakan allData
+      const exportData = filteredData.length > 0 ? filteredData : allData;
+      
       win.document.write(`
         <html>
           <head>
@@ -1320,19 +1350,56 @@
               .status-aktif { background-color: #c6f6d5; color: #276749; }
               .status-kadaluwarsa { background-color: #fed7d7; color: #742a2a; }
               .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; }
+              .expired { background-color: #fee2e2; }
             </style>
           </head>
           <body>
             <h2>LAPORAN DATA REKLAME KOTA SOLOK</h2>
             <p style="text-align: center;">Tanggal Cetak: ${new Date().toLocaleString('id-ID')}</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>Pemilik</th>
+                  <th>Merek</th>
+                  <th>Jenis</th>
+                  <th>Ukuran</th>
+                  <th>Lokasi</th>
+                  <th>Tarif</th>
+                  <th>Mulai</th>
+                  <th>Akhir</th>
+                  <th>Status</th>
+                  <th>Foto</th>
+                </tr>
+              </thead>
+              <tbody>
       `);
       
-      // Clone tabel dan hapus kolom aksi
-      const clonedTable = document.getElementById('tabelData').cloneNode(true);
-      clonedTable.querySelectorAll('th:last-child, td:last-child').forEach(el => el.remove());
-      win.document.body.appendChild(clonedTable);
+      const now = new Date();
+      exportData.forEach((item, i) => {
+        const isExpired = new Date(item.tglAkhir) < now;
+        const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
+        
+        win.document.write(`
+          <tr ${isExpired ? 'class="expired"' : ''}>
+            <td>${i + 1}</td>
+            <td>${item.pemilik}</td>
+            <td>${item.merek}</td>
+            <td>${item.jenis}</td>
+            <td>${item.ukuran}</td>
+            <td>${item.lokasi}</td>
+            <td>Rp ${Number(item.tarif).toLocaleString()}</td>
+            <td>${formatDate(item.tglMulai)}</td>
+            <td>${formatDate(item.tglAkhir)}</td>
+            <td><span class="status-badge ${isExpired ? 'status-kadaluwarsa' : 'status-aktif'}">${status}</span></td>
+            <td>${item.foto ? 'Ada' : 'Tidak Ada'}</td>
+          </tr>
+        `);
+      });
       
       win.document.write(`
+              </tbody>
+            </table>
           </body>
         </html>
       `);
