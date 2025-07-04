@@ -625,11 +625,11 @@
           </div>
           <div class="form-group">
             <label><i class="fas fa-calendar-alt"></i> Tanggal Mulai</label>
-            <input type="date" id="tglMulai" />
+            <input type="date" id="tglMulai" required />
           </div>
           <div class="form-group">
             <label><i class="fas fa-calendar-check"></i> Tanggal Akhir</label>
-            <input type="date" id="tglAkhir" />
+            <input type="date" id="tglAkhir" required />
           </div>
         </div>
         
@@ -893,7 +893,7 @@
       }
     }
 
-    // Fungsi untuk merender tabel dengan penanganan tanggal kosong
+    // Fungsi untuk merender tabel
     function renderTable() {
       const tbody = document.querySelector('#tabelData tbody');
       tbody.innerHTML = '';
@@ -905,8 +905,7 @@
       }
 
       data.forEach((item, i) => {
-        // Jika tanggal mulai atau akhir kosong, status Kadaluwarsa
-        const isExpired = !item.tglMulai || !item.tglAkhir || new Date(item.tglAkhir) < now;
+        const isExpired = new Date(item.tglAkhir) < now;
         const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
 
         const tr = document.createElement('tr');
@@ -956,13 +955,13 @@
       return new Date(dateString).toLocaleDateString('id-ID', options);
     }
 
-    // Fungsi untuk mengupdate statistik dengan penanganan tanggal kosong
+    // Fungsi untuk mengupdate statistik
     function updateStats() {
       const now = new Date();
       let total = 0, aktif = 0, kadaluarsa = 0, pendapatan = 0;
 
       data.forEach(item => {
-        const isExpired = !item.tglMulai || !item.tglAkhir || new Date(item.tglAkhir) < now;
+        const isExpired = new Date(item.tglAkhir) < now;
         if (isExpired) kadaluarsa++; else aktif++;
         total++;
         pendapatan += Number(item.tarif) || 0;
@@ -1099,7 +1098,7 @@
       }
     }
 
-    // Fungsi untuk filter data dengan penanganan tanggal kosong
+    // Fungsi untuk filter data
     function applyFilter() {
       const keyword = document.getElementById('searchInput').value.toLowerCase();
       const jenis = document.getElementById('jenisFilter').value;
@@ -1115,7 +1114,7 @@
         if (!item) return;
         
         const text = Object.values(item).join(' ').toLowerCase();
-        const isExpired = !item.tglMulai || !item.tglAkhir || new Date(item.tglAkhir) < now;
+        const isExpired = new Date(item.tglAkhir) < now;
         const statusText = isExpired ? 'Kadaluwarsa' : 'Aktif';
         
         const isMatch = !keyword || text.includes(keyword);
@@ -1196,7 +1195,7 @@
         'Tarif (Rp)': item.tarif,
         'Tanggal Mulai': item.tglMulai,
         'Tanggal Akhir': item.tglAkhir,
-        'Status': !item.tglMulai || !item.tglAkhir || new Date(item.tglAkhir) < new Date() ? 'Kadaluwarsa' : 'Aktif',
+        'Status': new Date(item.tglAkhir) < new Date() ? 'Kadaluwarsa' : 'Aktif',
         'Keterangan': item.keterangan || ''
       }));
       
@@ -1319,6 +1318,28 @@
       win.document.close();
       win.print();
     }
+
+    // Event listener untuk preview gambar sebelum upload
+    document.getElementById('foto').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        if (file.size > 2 * 1024 * 1024) {
+          alert('Ukuran file terlalu besar. Maksimal 2MB');
+          this.value = '';
+          return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          document.getElementById('previewImage').src = event.target.result;
+          document.getElementById('imagePreview').style.display = 'block';
+        }
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Event listener untuk reset form
+    document.getElementById('resetBtn').addEventListener('click', resetForm);
   </script>
 </body>
 </html>
