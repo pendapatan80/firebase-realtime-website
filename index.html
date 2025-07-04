@@ -553,23 +553,6 @@
     </div>
   </div>
 
-  <!-- Modal Konfirmasi Hapus Semua -->
-  <div id="confirmDeleteAllModal" class="modal">
-    <div class="modal-content">
-      <span class="close-modal" onclick="closeModal()">&times;</span>
-      <h2><i class="fas fa-exclamation-triangle"></i> Konfirmasi Hapus Semua Data</h2>
-      <p style="margin: 20px 0;">Apakah Anda yakin ingin menghapus SEMUA data reklame? Tindakan ini tidak dapat dibatalkan!</p>
-      <div style="display: flex; gap: 15px; justify-content: flex-end;">
-        <button class="btn-secondary" onclick="closeModal()">
-          <i class="fas fa-times"></i> Batal
-        </button>
-        <button class="btn-danger" onclick="confirmDeleteAll()">
-          <i class="fas fa-trash"></i> Hapus Semua
-        </button>
-      </div>
-    </div>
-  </div>
-
   <div class="container" id="appContainer" style="display: none;">
     <div class="header">
       <img src="https://upload.wikimedia.org/wikipedia/commons/8/87/Logo_Kota_Solok.png" alt="Logo Kota Solok" />
@@ -577,14 +560,9 @@
         <h1>BADAN KEUANGAN DAERAH</h1>
         <h2>KOTA SOLOK</h2>
       </div>
-      <div style="margin-left: auto; display: flex; gap: 15px;">
-        <button class="btn-danger" onclick="showDeleteAllModal()">
-          <i class="fas fa-trash"></i> Hapus Semua
-        </button>
-        <button class="btn-danger" onclick="logout()">
-          <i class="fas fa-sign-out-alt"></i> Logout
-        </button>
-      </div>
+      <button class="btn-danger" style="margin-left: auto;" onclick="logout()">
+        <i class="fas fa-sign-out-alt"></i> Logout
+      </button>
     </div>
 
     <div class="stats-container">
@@ -647,11 +625,11 @@
           </div>
           <div class="form-group">
             <label><i class="fas fa-calendar-alt"></i> Tanggal Mulai</label>
-            <input type="date" id="tglMulai" required />
+            <input type="date" id="tglMulai" />
           </div>
           <div class="form-group">
             <label><i class="fas fa-calendar-check"></i> Tanggal Akhir</label>
-            <input type="date" id="tglAkhir" required />
+            <input type="date" id="tglAkhir" />
           </div>
         </div>
         
@@ -668,6 +646,11 @@
               <i class="fas fa-trash"></i> Hapus
             </button>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label><i class="fas fa-sticky-note"></i> Keterangan Tambahan</label>
+          <textarea id="keterangan" rows="3" placeholder="Catatan tambahan tentang reklame"></textarea>
         </div>
 
         <div class="button-group">
@@ -736,6 +719,12 @@
           <tbody></tbody>
         </table>
       </div>
+
+      <div style="margin-top: 20px; text-align: center;">
+        <button class="btn-secondary" onclick="loadMoreData()" id="loadMoreBtn" style="display: none;">
+          <i class="fas fa-plus"></i> Muat Lebih Banyak
+        </button>
+      </div>
     </div>
   </div>
 
@@ -761,8 +750,9 @@
     // Variabel global
     let data = [];
     let editIndex = null;
-    let allData = []; // Menyimpan semua data
-    let filteredData = []; // Menyimpan data yang difilter untuk export
+    let lastKey = null;
+    const pageSize = 10;
+    let allDataLoaded = false;
 
     // Fungsi untuk menampilkan modal
     function showModal(modalId) {
@@ -774,11 +764,6 @@
       document.querySelectorAll('.modal').forEach(modal => {
         modal.style.display = 'none';
       });
-    }
-
-    // Fungsi untuk menampilkan modal hapus semua
-    function showDeleteAllModal() {
-      showModal('confirmDeleteAllModal');
     }
 
     // Fungsi untuk login
@@ -793,7 +778,7 @@
         .then((userCredential) => {
           closeModal();
           document.getElementById('appContainer').style.display = 'block';
-          loadAllData();
+          loadData();
         })
         .catch((error) => {
           errorElement.textContent = error.message;
@@ -814,69 +799,11 @@
     auth.onAuthStateChanged((user) => {
       if (user) {
         document.getElementById('appContainer').style.display = 'block';
-        loadAllData();
+        loadData();
       } else {
         showModal('loginModal');
       }
     });
-
-    // Fungsi untuk memuat semua data
-    function loadAllData() {
-      document.querySelector('#tabelData tbody').innerHTML = '<tr><td colspan="12" style="text-align: center;"><div class="loading"></div> Memuat data...</td></tr>';
-      
-      database.ref('reklame').once('value')
-        .then((snapshot) => {
-          data = [];
-          allData = [];
-          snapshot.forEach((childSnapshot) => {
-            const item = childSnapshot.val();
-            item.id = childSnapshot.key;
-            data.push(item);
-            allData.push(item);
-          });
-          
-          // Set filteredData sama dengan data yang dimuat
-          filteredData = [...data];
-          
-          renderTable();
-          updateStats();
-        })
-        .catch((error) => {
-          console.error("Error loading data:", error);
-          alert("Gagal memuat data: " + error.message);
-        });
-    }
-
-    // Fungsi untuk menghapus semua data
-    async function confirmDeleteAll() {
-      try {
-        // Hapus semua data dari database
-        await database.ref('reklame').remove();
-        
-        // Hapus semua gambar dari storage
-        const storageRef = storage.ref();
-        const listResult = await storageRef.listAll();
-        
-        const deletePromises = listResult.items.map(itemRef => itemRef.delete());
-        await Promise.all(deletePromises);
-        
-        // Reset data
-        data = [];
-        allData = [];
-        filteredData = [];
-        
-        // Update tampilan
-        renderTable();
-        updateStats();
-        
-        closeModal();
-        alert('Semua data berhasil dihapus');
-        
-      } catch (error) {
-        console.error("Error menghapus semua data:", error);
-        alert("Gagal menghapus semua data: " + error.message);
-      }
-    }
 
     // Preview gambar sebelum upload
     document.getElementById('foto').addEventListener('change', function(e) {
@@ -904,19 +831,82 @@
       document.getElementById('imagePreview').style.display = 'none';
     }
 
-    // Fungsi untuk merender tabel
+    // Fungsi untuk memuat data dari Firebase
+    function loadData() {
+      document.getElementById('loadMoreBtn').style.display = 'none';
+      document.querySelector('#tabelData tbody').innerHTML = '<tr><td colspan="12" style="text-align: center;"><div class="loading"></div> Memuat data...</td></tr>';
+      
+      let query = database.ref('reklame').orderByKey().limitToFirst(pageSize);
+      
+      if (lastKey) {
+        query = database.ref('reklame').orderByKey().startAt(lastKey).limitToFirst(pageSize + 1);
+      }
+
+      query.once('value')
+        .then((snapshot) => {
+          const newData = [];
+          let count = 0;
+          let firstKey = null;
+          
+          snapshot.forEach((childSnapshot) => {
+            if (count < pageSize || !lastKey) {
+              const item = childSnapshot.val();
+              item.id = childSnapshot.key;
+              newData.push(item);
+              firstKey = firstKey || childSnapshot.key;
+              count++;
+            }
+            lastKey = childSnapshot.key;
+          });
+
+          if (lastKey && newData.length > 0) {
+            if (newData.length < pageSize) {
+              allDataLoaded = true;
+            } else {
+              document.getElementById('loadMoreBtn').style.display = 'block';
+            }
+          }
+
+          if (!lastKey || allDataLoaded) {
+            document.getElementById('loadMoreBtn').style.display = 'none';
+          }
+
+          if (lastKey) {
+            data = [...data, ...newData];
+          } else {
+            data = newData;
+          }
+
+          renderTable();
+          updateStats();
+        })
+        .catch((error) => {
+          console.error("Error loading data:", error);
+          alert("Gagal memuat data: " + error.message);
+        });
+    }
+
+    // Fungsi untuk memuat lebih banyak data
+    function loadMoreData() {
+      if (!allDataLoaded) {
+        loadData();
+      }
+    }
+
+    // Fungsi untuk merender tabel dengan penanganan tanggal kosong
     function renderTable() {
       const tbody = document.querySelector('#tabelData tbody');
       tbody.innerHTML = '';
       const now = new Date();
 
-      if (filteredData.length === 0) {
+      if (data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="12" style="text-align: center;">Tidak ada data reklame</td></tr>';
         return;
       }
 
-      filteredData.forEach((item, i) => {
-        const isExpired = new Date(item.tglAkhir) < now;
+      data.forEach((item, i) => {
+        // Jika tanggal mulai atau akhir kosong, status Kadaluwarsa
+        const isExpired = !item.tglMulai || !item.tglAkhir || new Date(item.tglAkhir) < now;
         const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
 
         const tr = document.createElement('tr');
@@ -966,13 +956,13 @@
       return new Date(dateString).toLocaleDateString('id-ID', options);
     }
 
-    // Fungsi untuk mengupdate statistik
+    // Fungsi untuk mengupdate statistik dengan penanganan tanggal kosong
     function updateStats() {
       const now = new Date();
       let total = 0, aktif = 0, kadaluarsa = 0, pendapatan = 0;
 
-      allData.forEach(item => {
-        const isExpired = new Date(item.tglAkhir) < now;
+      data.forEach(item => {
+        const isExpired = !item.tglMulai || !item.tglAkhir || new Date(item.tglAkhir) < now;
         if (isExpired) kadaluarsa++; else aktif++;
         total++;
         pendapatan += Number(item.tarif) || 0;
@@ -1008,6 +998,7 @@
           tarif: input('tarif'),
           tglMulai: input('tglMulai'),
           tglAkhir: input('tglAkhir'),
+          keterangan: input('keterangan'),
           updatedAt: new Date().toISOString()
         };
 
@@ -1018,7 +1009,6 @@
           await storageRef.put(file);
           entry.foto = await storageRef.getDownloadURL();
         } else if (editIndex && data.find(item => item.id === editIndex)?.foto) {
-          // Jika edit dan tidak upload foto baru, gunakan foto lama
           entry.foto = data.find(item => item.id === editIndex).foto;
         }
 
@@ -1029,7 +1019,10 @@
         resetForm();
         
         // Muat ulang data
-        loadAllData();
+        lastKey = null;
+        allDataLoaded = false;
+        data = [];
+        loadData();
         
       } catch (error) {
         console.error("Error menyimpan data:", error);
@@ -1046,7 +1039,6 @@
       editIndex = null;
       document.getElementById('imagePreview').style.display = 'none';
       document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Simpan Data';
-      document.getElementById('foto').removeAttribute('required');
     }
 
     // Fungsi untuk edit data
@@ -1065,6 +1057,7 @@
       document.getElementById('tarif').value = item.tarif || '';
       document.getElementById('tglMulai').value = item.tglMulai || '';
       document.getElementById('tglAkhir').value = item.tglAkhir || '';
+      document.getElementById('keterangan').value = item.keterangan || '';
       
       // Tampilkan preview gambar jika ada
       if (item.foto) {
@@ -1095,7 +1088,10 @@
         }
         
         // Muat ulang data
-        loadAllData();
+        lastKey = null;
+        allDataLoaded = false;
+        data = [];
+        loadData();
         
       } catch (error) {
         console.error("Error menghapus data:", error);
@@ -1103,26 +1099,31 @@
       }
     }
 
-    // Fungsi untuk filter data
+    // Fungsi untuk filter data dengan penanganan tanggal kosong
     function applyFilter() {
       const keyword = document.getElementById('searchInput').value.toLowerCase();
       const jenis = document.getElementById('jenisFilter').value;
       const status = document.getElementById('statusFilter').value;
       const now = new Date();
       
-      filteredData = data.filter(item => {
+      const tbody = document.querySelector('#tabelData tbody');
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const index = parseInt(tr.cells[0].textContent) - 1;
+        if (isNaN(index)) return;
+        
+        const item = data[index];
+        if (!item) return;
+        
         const text = Object.values(item).join(' ').toLowerCase();
-        const isExpired = new Date(item.tglAkhir) < now;
+        const isExpired = !item.tglMulai || !item.tglAkhir || new Date(item.tglAkhir) < now;
         const statusText = isExpired ? 'Kadaluwarsa' : 'Aktif';
         
         const isMatch = !keyword || text.includes(keyword);
         const isJenis = !jenis || item.jenis === jenis;
         const isStatus = !status || statusText === status;
         
-        return isMatch && isJenis && isStatus;
+        tr.style.display = isMatch && isJenis && isStatus ? '' : 'none';
       });
-      
-      renderTable();
     }
 
     // Fungsi untuk import dari Excel
@@ -1142,6 +1143,9 @@
           const sheet = wb.Sheets[wb.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(sheet);
           
+          // Hapus semua data yang ada
+          await database.ref('reklame').remove();
+          
           // Upload data baru
           const uploadPromises = rows.map(async (row, index) => {
             const id = database.ref().child('reklame').push().key;
@@ -1154,6 +1158,7 @@
               tarif: row['Tarif'] || 0,
               tglMulai: row['Tanggal Mulai'] || '',
               tglAkhir: row['Tanggal Akhir'] || '',
+              keterangan: row['Keterangan'] || '',
               createdAt: new Date().toISOString()
             };
             
@@ -1163,7 +1168,10 @@
           await Promise.all(uploadPromises);
           
           // Muat ulang data
-          loadAllData();
+          lastKey = null;
+          allDataLoaded = false;
+          data = [];
+          loadData();
           
           alert(`Berhasil mengimpor ${rows.length} data reklame`);
           
@@ -1179,10 +1187,7 @@
 
     // Fungsi untuk export ke Excel
     function exportExcel() {
-      // Gunakan filteredData jika ada filter, jika tidak gunakan allData
-      const exportData = filteredData.length > 0 ? filteredData : allData;
-      
-      const formattedData = exportData.map(item => ({
+      const exportData = data.map(item => ({
         'Pemilik': item.pemilik,
         'Merek': item.merek,
         'Jenis': item.jenis,
@@ -1191,12 +1196,12 @@
         'Tarif (Rp)': item.tarif,
         'Tanggal Mulai': item.tglMulai,
         'Tanggal Akhir': item.tglAkhir,
-        'Status': new Date(item.tglAkhir) < new Date() ? 'Kadaluwarsa' : 'Aktif',
-        'URL Foto': item.foto || ''
+        'Status': !item.tglMulai || !item.tglAkhir || new Date(item.tglAkhir) < new Date() ? 'Kadaluwarsa' : 'Aktif',
+        'Keterangan': item.keterangan || ''
       }));
       
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(formattedData);
+      const ws = XLSX.utils.json_to_sheet(exportData);
       
       // Tambahkan judul
       XLSX.utils.sheet_add_aoa(ws, [["LAPORAN DATA REKLAME KOTA SOLOK"]], { origin: "A1" });
@@ -1204,26 +1209,22 @@
       
       // Gabungkan sel untuk judul
       ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } }
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }
       ];
       
       XLSX.utils.book_append_sheet(wb, ws, 'Data Reklame');
       XLSX.writeFile(wb, `data-reklame-${new Date().toISOString().split('T')[0]}.xlsx`);
     }
 
-    // Fungsi untuk export ke PDF dengan pagination
+    // Fungsi untuk export ke PDF
     async function exportPDF() {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
+        orientation: 'landscape',
+        unit: 'mm'
       });
 
-      // Gunakan filteredData jika ada filter, jika tidak gunakan allData
-      const exportData = filteredData.length > 0 ? filteredData : allData;
-      
       // Sembunyikan elemen yang tidak perlu
       document.getElementById('laporanJudul').style.display = 'block';
       const aksiHeader = document.querySelector('th:last-child');
@@ -1238,37 +1239,9 @@
       // Clone tabel dan sesuaikan untuk PDF
       const clonedTable = document.getElementById('tabelData').cloneNode(true);
       clonedTable.style.width = '100%';
-      clonedTable.style.fontSize = '10px';
-      
-      // Kosongkan tbody dan isi dengan data yang difilter
-      const tbody = clonedTable.querySelector('tbody');
-      tbody.innerHTML = '';
-      
-      const now = new Date();
-      exportData.forEach((item, i) => {
-        const isExpired = new Date(item.tglAkhir) < now;
-        const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
-        
-        const tr = document.createElement('tr');
-        if (isExpired) tr.classList.add('expired');
-        
-        tr.innerHTML = `
-          <td>${i + 1}</td>
-          <td>${item.pemilik}</td>
-          <td>${item.merek}</td>
-          <td>${item.jenis}</td>
-          <td>${item.ukuran}</td>
-          <td>${item.lokasi}</td>
-          <td>Rp ${Number(item.tarif).toLocaleString()}</td>
-          <td>${formatDate(item.tglMulai)}</td>
-          <td>${formatDate(item.tglAkhir)}</td>
-          <td><span class="status-badge ${isExpired ? 'status-kadaluwarsa' : 'status-aktif'}">${status}</span></td>
-          <td>${item.foto ? 'Ada' : 'Tidak Ada'}</td>`;
-        tbody.appendChild(tr);
-      });
-      
+      clonedTable.style.fontSize = '12px';
       clonedTable.querySelectorAll('th, td').forEach(cell => {
-        cell.style.padding = '3px 5px';
+        cell.style.padding = '4px 6px';
       });
       el.appendChild(clonedTable);
       
@@ -1279,11 +1252,7 @@
       const canvas = await html2canvas(el, {
         scale: 2,
         logging: false,
-        useCORS: true,
-        width: el.offsetWidth,
-        height: el.offsetHeight,
-        windowWidth: el.scrollWidth,
-        windowHeight: el.scrollHeight
+        useCORS: true
       });
       
       // Hapus elemen sementara
@@ -1291,34 +1260,18 @@
       
       // Tambahkan gambar ke PDF
       const imgData = canvas.toDataURL('image/png');
-      const imgWidth = doc.internal.pageSize.getWidth() - 20; // mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgWidth = 280; // mm
+      const imgHeight = canvas.height * imgWidth / canvas.width;
       
-      // Hitung jumlah halaman yang dibutuhkan
-      const pageHeight = doc.internal.pageSize.getHeight() - 20;
-      let heightLeft = imgHeight;
-      let position = 10;
-      let page = 1;
+      doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
       
-      doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      
-      // Tambahkan halaman baru jika konten terlalu panjang
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        doc.addPage();
-        page++;
-        doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-      
-      // Tambahkan footer di setiap halaman
+      // Tambahkan footer
       const totalPages = doc.internal.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(10);
-        doc.text(`Halaman ${i} dari ${totalPages}`, doc.internal.pageSize.getWidth() - 30, doc.internal.pageSize.getHeight() - 10);
-        doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 10, doc.internal.pageSize.getHeight() - 10);
+        doc.text(`Halaman ${i} dari ${totalPages}`, 280 - 20, 200);
+        doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 10, 200);
       }
       
       // Simpan PDF
@@ -1333,10 +1286,6 @@
     // Fungsi untuk cetak tabel
     function printTable() {
       const win = window.open('', '', 'height=700,width=900');
-      
-      // Gunakan filteredData jika ada filter, jika tidak gunakan allData
-      const exportData = filteredData.length > 0 ? filteredData : allData;
-      
       win.document.write(`
         <html>
           <head>
@@ -1350,56 +1299,19 @@
               .status-aktif { background-color: #c6f6d5; color: #276749; }
               .status-kadaluwarsa { background-color: #fed7d7; color: #742a2a; }
               .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; }
-              .expired { background-color: #fee2e2; }
             </style>
           </head>
           <body>
             <h2>LAPORAN DATA REKLAME KOTA SOLOK</h2>
             <p style="text-align: center;">Tanggal Cetak: ${new Date().toLocaleString('id-ID')}</p>
-            <table>
-              <thead>
-                <tr>
-                  <th>No</th>
-                  <th>Pemilik</th>
-                  <th>Merek</th>
-                  <th>Jenis</th>
-                  <th>Ukuran</th>
-                  <th>Lokasi</th>
-                  <th>Tarif</th>
-                  <th>Mulai</th>
-                  <th>Akhir</th>
-                  <th>Status</th>
-                  <th>Foto</th>
-                </tr>
-              </thead>
-              <tbody>
       `);
       
-      const now = new Date();
-      exportData.forEach((item, i) => {
-        const isExpired = new Date(item.tglAkhir) < now;
-        const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
-        
-        win.document.write(`
-          <tr ${isExpired ? 'class="expired"' : ''}>
-            <td>${i + 1}</td>
-            <td>${item.pemilik}</td>
-            <td>${item.merek}</td>
-            <td>${item.jenis}</td>
-            <td>${item.ukuran}</td>
-            <td>${item.lokasi}</td>
-            <td>Rp ${Number(item.tarif).toLocaleString()}</td>
-            <td>${formatDate(item.tglMulai)}</td>
-            <td>${formatDate(item.tglAkhir)}</td>
-            <td><span class="status-badge ${isExpired ? 'status-kadaluwarsa' : 'status-aktif'}">${status}</span></td>
-            <td>${item.foto ? 'Ada' : 'Tidak Ada'}</td>
-          </tr>
-        `);
-      });
+      // Clone tabel dan hapus kolom aksi
+      const clonedTable = document.getElementById('tabelData').cloneNode(true);
+      clonedTable.querySelectorAll('th:last-child, td:last-child').forEach(el => el.remove());
+      win.document.body.appendChild(clonedTable);
       
       win.document.write(`
-              </tbody>
-            </table>
           </body>
         </html>
       `);
@@ -1407,28 +1319,6 @@
       win.document.close();
       win.print();
     }
-
-    // Event listener untuk preview gambar sebelum upload
-    document.getElementById('foto').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (file) {
-        if (file.size > 2 * 1024 * 1024) {
-          alert('Ukuran file terlalu besar. Maksimal 2MB');
-          this.value = '';
-          return;
-        }
-        
-        const reader = new FileReader();
-        reader.onload = function(event) {
-          document.getElementById('previewImage').src = event.target.result;
-          document.getElementById('imagePreview').style.display = 'block';
-        }
-        reader.readAsDataURL(file);
-      }
-    });
-
-    // Event listener untuk reset form
-    document.getElementById('resetBtn').addEventListener('click', resetForm);
   </script>
 </body>
 </html>
