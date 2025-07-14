@@ -470,6 +470,37 @@
       margin-bottom: 10px;
     }
 
+    /* Confirmation Modal */
+    .confirmation-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .confirmation-content {
+      background: white;
+      padding: 30px;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+
+    .confirmation-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
     /* Responsive Styles */
     @media (max-width: 768px) {
       .header {
@@ -570,6 +601,22 @@
     </div>
   </div>
 
+  <!-- Modal Konfirmasi Hapus -->
+  <div id="confirmDeleteModal" class="confirmation-modal">
+    <div class="confirmation-content">
+      <h2><i class="fas fa-exclamation-triangle"></i> Konfirmasi Hapus</h2>
+      <p id="deleteConfirmationMessage" style="margin: 20px 0;">Apakah Anda yakin ingin menghapus data ini?</p>
+      <div class="confirmation-buttons">
+        <button class="btn-secondary" onclick="closeModal('confirmDeleteModal')">
+          <i class="fas fa-times"></i> Batal
+        </button>
+        <button class="btn-danger" onclick="proceedWithDelete()">
+          <i class="fas fa-trash"></i> Ya, Hapus
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="container" id="appContainer" style="display: none;">
     <div class="header">
       <img src="https://upload.wikimedia.org/wikipedia/commons/8/87/Logo_Kota_Solok.png" alt="Logo Kota Solok" />
@@ -647,11 +694,11 @@
           </div>
           <div class="form-group">
             <label><i class="fas fa-calendar-alt"></i> Tanggal Mulai</label>
-            <input type="date" id="tglMulai" required />
+            <input type="date" id="tglMulai" />
           </div>
           <div class="form-group">
             <label><i class="fas fa-calendar-check"></i> Tanggal Akhir</label>
-            <input type="date" id="tglAkhir" required />
+            <input type="date" id="tglAkhir" />
           </div>
         </div>
         
@@ -763,6 +810,7 @@
     let editIndex = null;
     let allData = []; // Menyimpan semua data
     let filteredData = []; // Menyimpan data yang difilter untuk export
+    let itemToDelete = null; // Menyimpan item yang akan dihapus
 
     // Fungsi untuk menampilkan modal
     function showModal(modalId) {
@@ -770,15 +818,53 @@
     }
 
     // Fungsi untuk menyembunyikan modal
-    function closeModal() {
-      document.querySelectorAll('.modal').forEach(modal => {
-        modal.style.display = 'none';
-      });
+    function closeModal(modalId = null) {
+      if (modalId) {
+        document.getElementById(modalId).style.display = 'none';
+      } else {
+        document.querySelectorAll('.modal, .confirmation-modal').forEach(modal => {
+          modal.style.display = 'none';
+        });
+      }
     }
 
     // Fungsi untuk menampilkan modal hapus semua
     function showDeleteAllModal() {
       showModal('confirmDeleteAllModal');
+    }
+
+    // Fungsi untuk menampilkan modal konfirmasi hapus
+    function showDeleteConfirmation(item) {
+      itemToDelete = item;
+      document.getElementById('deleteConfirmationMessage').textContent = 
+        `Apakah Anda yakin ingin menghapus data reklame milik ${item.pemilik}?`;
+      showModal('confirmDeleteModal');
+    }
+
+    // Fungsi untuk melanjutkan penghapusan setelah konfirmasi
+    async function proceedWithDelete() {
+      if (!itemToDelete) return;
+      
+      try {
+        // Hapus dari database
+        await database.ref('reklame/' + itemToDelete.id).remove();
+        
+        // Hapus gambar dari storage jika ada
+        if (itemToDelete.foto) {
+          const fotoRef = storage.refFromURL(itemToDelete.foto);
+          await fotoRef.delete();
+        }
+        
+        // Muat ulang data
+        loadAllData();
+        closeModal('confirmDeleteModal');
+        
+      } catch (error) {
+        console.error("Error menghapus data:", error);
+        alert("Gagal menghapus data: " + error.message);
+      } finally {
+        itemToDelete = null;
+      }
     }
 
     // Fungsi untuk login
@@ -916,7 +1002,8 @@
       }
 
       filteredData.forEach((item, i) => {
-        const isExpired = new Date(item.tglAkhir) < now;
+        // Jika tanggal akhir kosong atau tidak valid, anggap sebagai kadaluwarsa
+        const isExpired = !item.tglAkhir || isNaN(new Date(item.tglAkhir)) || new Date(item.tglAkhir) < now;
         const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
 
         const tr = document.createElement('tr');
@@ -944,7 +1031,7 @@
               <button class="btn-edit btn-sm" onclick="editData('${item.id}')">
                 <i class="fas fa-edit"></i> Edit
               </button>
-              <button class="btn-delete btn-sm" onclick="hapusData('${item.id}')">
+              <button class="btn-delete btn-sm" onclick="showDeleteConfirmation(${JSON.stringify(item).replace(/"/g, '&quot;')})">
                 <i class="fas fa-trash"></i> Hapus
               </button>
             </div>
@@ -961,7 +1048,7 @@
 
     // Fungsi untuk memformat tanggal
     function formatDate(dateString) {
-      if (!dateString) return '-';
+      if (!dateString || isNaN(new Date(dateString))) return '-';
       const options = { year: 'numeric', month: 'short', day: 'numeric' };
       return new Date(dateString).toLocaleDateString('id-ID', options);
     }
@@ -972,7 +1059,7 @@
       let total = 0, aktif = 0, kadaluarsa = 0, pendapatan = 0;
 
       allData.forEach(item => {
-        const isExpired = new Date(item.tglAkhir) < now;
+        const isExpired = !item.tglAkhir || isNaN(new Date(item.tglAkhir)) || new Date(item.tglAkhir) < now;
         if (isExpired) kadaluarsa++; else aktif++;
         total++;
         pendapatan += Number(item.tarif) || 0;
@@ -1079,30 +1166,6 @@
       document.getElementById('submitBtn').innerHTML = '<i class="fas fa-save"></i> Update Data';
     }
 
-    // Fungsi untuk hapus data
-    async function hapusData(id) {
-      if (!confirm('Apakah Anda yakin ingin menghapus data ini?')) return;
-      
-      try {
-        // Hapus dari database
-        await database.ref('reklame/' + id).remove();
-        
-        // Hapus gambar dari storage jika ada
-        const item = data.find(item => item.id === id);
-        if (item?.foto) {
-          const fotoRef = storage.refFromURL(item.foto);
-          await fotoRef.delete();
-        }
-        
-        // Muat ulang data
-        loadAllData();
-        
-      } catch (error) {
-        console.error("Error menghapus data:", error);
-        alert("Gagal menghapus data: " + error.message);
-      }
-    }
-
     // Fungsi untuk filter data
     function applyFilter() {
       const keyword = document.getElementById('searchInput').value.toLowerCase();
@@ -1112,7 +1175,7 @@
       
       filteredData = data.filter(item => {
         const text = Object.values(item).join(' ').toLowerCase();
-        const isExpired = new Date(item.tglAkhir) < now;
+        const isExpired = !item.tglAkhir || isNaN(new Date(item.tglAkhir)) || new Date(item.tglAkhir) < now;
         const statusText = isExpired ? 'Kadaluwarsa' : 'Aktif';
         
         const isMatch = !keyword || text.includes(keyword);
@@ -1145,15 +1208,28 @@
           // Upload data baru
           const uploadPromises = rows.map(async (row, index) => {
             const id = database.ref().child('reklame').push().key;
+            
+            // Format tanggal dari Excel (bisa berupa string atau objek Date)
+            let tglMulai = '';
+            let tglAkhir = '';
+            
+            if (row['Tanggal Mulai']) {
+              tglMulai = formatExcelDate(row['Tanggal Mulai']);
+            }
+            
+            if (row['Tanggal Akhir']) {
+              tglAkhir = formatExcelDate(row['Tanggal Akhir']);
+            }
+            
             const entry = {
               pemilik: row['Pemilik'] || '',
               merek: row['Merek'] || '',
               jenis: row['Jenis'] || '',
               ukuran: row['Ukuran'] || '',
               lokasi: row['Lokasi'] || '',
-              tarif: row['Tarif'] || 0,
-              tglMulai: row['Tanggal Mulai'] || '',
-              tglAkhir: row['Tanggal Akhir'] || '',
+              tarif: row['Tarif'] || row['Tarif (Rp)'] || 0,
+              tglMulai: tglMulai,
+              tglAkhir: tglAkhir,
               createdAt: new Date().toISOString()
             };
             
@@ -1177,6 +1253,37 @@
       reader.readAsBinaryString(file);
     }
 
+    // Fungsi untuk memformat tanggal dari Excel
+    function formatExcelDate(excelDate) {
+      // Jika sudah dalam format string ISO (dari Excel)
+      if (typeof excelDate === 'string' && excelDate.match(/^\d{4}-\d{2}-\d{2}/)) {
+        return excelDate;
+      }
+      
+      // Jika berupa angka (serial Excel date)
+      if (typeof excelDate === 'number') {
+        // Convert Excel serial date to JS Date
+        const utc_days = Math.floor(excelDate - 25569);
+        const utc_value = utc_days * 86400;                                        
+        const date_info = new Date(utc_value * 1000);
+        
+        // Format as YYYY-MM-DD
+        const year = date_info.getFullYear();
+        const month = String(date_info.getMonth() + 1).padStart(2, '0');
+        const day = String(date_info.getDate()).padStart(2, '0');
+        
+        return `${year}-${month}-${day}`;
+      }
+      
+      // Jika berupa objek Date
+      if (excelDate instanceof Date) {
+        return excelDate.toISOString().split('T')[0];
+      }
+      
+      // Jika tidak valid, kembalikan string kosong
+      return '';
+    }
+
     // Fungsi untuk export ke Excel
     function exportExcel() {
       // Gunakan filteredData jika ada filter, jika tidak gunakan allData
@@ -1191,7 +1298,7 @@
         'Tarif (Rp)': item.tarif,
         'Tanggal Mulai': item.tglMulai,
         'Tanggal Akhir': item.tglAkhir,
-        'Status': new Date(item.tglAkhir) < new Date() ? 'Kadaluwarsa' : 'Aktif',
+        'Status': (!item.tglAkhir || isNaN(new Date(item.tglAkhir)) || new Date(item.tglAkhir) < new Date()) ? 'Kadaluwarsa' : 'Aktif',
         'URL Foto': item.foto || ''
       }));
       
@@ -1246,7 +1353,7 @@
       
       const now = new Date();
       exportData.forEach((item, i) => {
-        const isExpired = new Date(item.tglAkhir) < now;
+        const isExpired = !item.tglAkhir || isNaN(new Date(item.tglAkhir)) || new Date(item.tglAkhir) < now;
         const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
         
         const tr = document.createElement('tr');
@@ -1377,7 +1484,7 @@
       
       const now = new Date();
       exportData.forEach((item, i) => {
-        const isExpired = new Date(item.tglAkhir) < now;
+        const isExpired = !item.tglAkhir || isNaN(new Date(item.tglAkhir)) || new Date(item.tglAkhir) < now;
         const status = isExpired ? 'Kadaluwarsa' : 'Aktif';
         
         win.document.write(`
